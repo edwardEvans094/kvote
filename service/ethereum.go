@@ -1,7 +1,8 @@
-package ethereum
+package blockchainVote
 
 import (
 	"log"
+	"math/big"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -22,8 +23,8 @@ type Ethereum struct {
 	// averageBlockTime int64
 }
 
-func newEthereum(network string, apiString string) (*Ethereum, err) {
-	networkAbi, err := abi.JSON(strings.NewReader(networkAbiStr))
+func NewEthereum(network string, abiString string) (*Ethereum, error) {
+	networkAbi, err := abi.JSON(strings.NewReader(abiString))
 	if err != nil {
 		log.Print(err)
 		return nil, err
@@ -38,23 +39,23 @@ func newEthereum(network string, apiString string) (*Ethereum, err) {
 	return ethereum, nil
 }
 
-func (self *Ethereum) encodeCreateCampaign(title string, optionNames []string, optionUrls []string, end int, isMultipleChoices bool, whitelistedAddresses []string) (string, error) {
+func (self *Ethereum) EncodeCreateCampaign(title [32]byte, optionNames [][32]byte, optionUrls [][32]byte, end *big.Int, isMultipleChoices bool, whitelistedAddresses []string) (string, error) {
 
-	optionNameList := make([]string, 0)
-	for _, optionItem := range optionNames {
-		optionNameList = append(optionNameList, common.Hex2Bytes(optionItem))
-	}
+	// optionNameList := make([]string, 0)
+	// for _, optionItem := range optionNames {
+	// 	optionNameList = append(optionNameList, [32]byte(optionItem))
+	// }
 
-	optionUrlList := make([]string, 0)
-	for _, optionUrl := range optionNames {
-		optionUrlList = append(optionUrlList, common.Hex2Bytes(optionUrl))
-	}
+	// optionUrlList := make([]string, 0)
+	// for _, optionUrl := range optionNames {
+	// 	optionUrlList = append(optionUrlList, common.Hex2Bytes(optionUrl))
+	// }
 
 	listAddress := make([]common.Address, 0)
 	for _, wAddress := range whitelistedAddresses {
 		listAddress = append(listAddress, common.HexToAddress(wAddress))
 	}
-	encodedData, err := self.wrapperAbi.Pack("createCampaign", common.Hex2Bytes(title), optionNameList, optionUrlList, end, isMultipleChoices, listAddress)
+	encodedData, err := self.networkAbi.Pack("createCampaign", title, optionNames, optionUrls, end, isMultipleChoices, listAddress)
 	if err != nil {
 		// log.Print(err)
 		return "", err
