@@ -204,7 +204,9 @@ func main() {
 	if createNetworkErr != nil {
 		panic(createNetworkErr)
 	}
-	voteData, encodeErr := voteNetwork.EncodeCreateCampaign(title, listOptionsName, listOptionsUrl, big.NewInt(1539839022), false, nil)
+
+	whiteListAddresses := []string{"0xd1263bec4e244d387f3205f6967cd68254c9a185", "0x2262d4f6312805851e3b27c40db2c7282e6e4a49"}
+	voteData, encodeErr := voteNetwork.EncodeCreateCampaign(title, listOptionsName, listOptionsUrl, big.NewInt(999999999999), false, whiteListAddresses)
 	if encodeErr != nil {
 		panic(encodeErr)
 	}
@@ -249,11 +251,12 @@ func main() {
 		big.NewInt(0),
 		500000,
 		big.NewInt(50000000000),
-		[]byte(voteData),
+		common.Hex2Bytes(voteData),
 	)
-	fmt.Println("===================tx created: ", tx, unlockedKey)
+	fmt.Println("===================tx created: ", tx)
+	fmt.Printf("%x", unlockedKey.PrivateKey.D.Bytes())
 	// ************** sign data
-	// signTx, signErr := types.SignTx(tx, types.NewEIP155Signer(big.NewInt(1)), unlockedKey.PrivateKey)
+	// signTx, signErr := types.SignTx(tx, types.NewEIP155Signer(big.NewInt(4)), unlockedKey.PrivateKey)
 	signTx, signErr := types.SignTx(tx, types.HomesteadSigner{}, unlockedKey.PrivateKey)
 	if signErr != nil {
 		panic(signErr)
@@ -267,18 +270,5 @@ func main() {
 	if errSendTransaction != nil {
 		panic(errSendTransaction)
 	}
-
-	fmt.Println("===================DONE ")
-	fmt.Printf("tx sent: %s", tx.Hash().Hex())
-	// ks := keystore.NewKeyStore(
-	// 	"./bot.keystore",
-	// 	keystore.LightScryptN,
-	// 	keystore.LightScryptP)
-
-	// botAccount := &Account{
-	// 	Address: "0x6F0311366C7178A8bE4392347c82415D7298278e",
-	// }
-	// unlockedKey, _ := ks.Unlock(botAccount, "123qwe")
-	// nonce, _ := client.NonceAt(ctx, unlockedKey.Address)
 
 }
