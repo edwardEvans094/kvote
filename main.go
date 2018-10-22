@@ -63,12 +63,12 @@ func (b Bot) handleCreatePoll(m *tb.Message) {
 	mCreate[fmt.Sprintf("%d_%d", m.Chat.ID, m.Sender.ID)] = pollData
 
 	if len(pollData) == 0 {
-		b.bot.Reply(m, `đúng rồi đấy, tao đang tạo poll, đưa bố title nào`)
+		b.bot.Reply(m, `Em chào đại ca, đại ca muốn tạo Poll à, đưa em title nào`)
 	} else if len(pollData) == 1 {
-		b.bot.Reply(m, `DM title dài vler, thế Options đâu ?`)
+		b.bot.Reply(m, `Title dài vler, thế Options là gì thế ?`)
 	} else {
 		optionIndex := len(pollData)
-		b.bot.Reply(m, fmt.Sprintf("Okey, option %d của mày là gì ?", optionIndex))
+		b.bot.Reply(m, fmt.Sprintf("Okey, option %d tiếp theo là gì ?", optionIndex))
 	}
 
 	fmt.Println(pollData)
@@ -116,7 +116,7 @@ func (b Bot) handleSubmit(m *tb.Message) {
 
 func (b Bot) handleDefault(m *tb.Message) {
 	if m.Private() {
-		b.bot.Send(m.Chat, `Mày nói clgv, éo hiểu!!`)
+		b.bot.Send(m.Chat, `Nói clgv, éo hiểu!!`)
 	}
 }
 
@@ -253,7 +253,7 @@ func main() {
 	mybot.bot.Handle("/createPoll", func(m *tb.Message) {
 		updateCurrentCommand("createPoll", m)
 		// mybot.handleCreatePoll(m)
-		b.Reply(m, "đúng rồi đấy, tao đang tạo poll, đưa bố title nào")
+		b.Reply(m, "Em chào đại ca, đại ca muốn tạo Poll à, đưa em title nào")
 	})
 
 	mybot.bot.Handle("/done", func(m *tb.Message) {
