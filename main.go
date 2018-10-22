@@ -1,19 +1,15 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/big"
 	"os"
+	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/joho/godotenv"
 
 	blockchainVote "github.com/kvote/service"
@@ -23,11 +19,14 @@ import (
 var mCommand map[string]string
 var mCreate map[string][]string
 
+var mTx map[string]*tb.Message
+
 // Bot object
 type Bot struct {
 	bot *tb.Bot
 	// storage  *QuestionStorage
-	deadline int64
+	deadline    int64
+	voteNetwork *blockchainVote.Ethereum
 }
 
 type Option struct {
@@ -77,6 +76,44 @@ func (b Bot) handleCreatePoll(m *tb.Message) {
 
 }
 
+func (b Bot) handleSubmit(m *tb.Message) {
+	pollData := mCreate[fmt.Sprintf("%d_%d", m.Chat.ID, m.Sender.ID)]
+	fmt.Println(pollData)
+
+	var title [32]byte
+	optionList := make([][32]byte, len(pollData)-1)
+	urlList := make([][32]byte, len(pollData)-1)
+	var option, url [32]byte
+	for i, d := range pollData {
+		if i == 0 {
+			//tiitle
+			copy(title[:], d)
+		} else {
+			copy(option[:], d)
+			copy(url[:], d)
+			optionList = append(optionList, option)
+			urlList = append(urlList, url)
+		}
+	}
+
+	whiteListAddresses := []string{"0xd1263bec4e244d387f3205f6967cd68254c9a185", "0x2262d4f6312805851e3b27c40db2c7282e6e4a49"}
+	voteData, encodeErr := b.voteNetwork.EncodeCreateCampaign(title, optionList, urlList, big.NewInt(999999999999), false, whiteListAddresses)
+	if encodeErr != nil {
+		panic(encodeErr)
+	}
+
+	// fmt.Println("===================vote data encoded: ", voteData, m.Text)
+	txHash, errSendTx := b.voteNetwork.SendTx(m.Text, voteData)
+	fmt.Println("===================txhash created: ", txHash, strings.ToLower(txHash))
+
+	if errSendTx != nil {
+		panic(errSendTx)
+	}
+	mTx[strings.ToLower(txHash)] = m
+	b.bot.Send(m.Chat, fmt.Sprintf("Em đã tạo poll rồi nhé :v, tsHash đây: %s . Khi nào được em báo nhé!", txHash))
+	// fmt.Println("********************* send trasaction done: ", txHash)
+}
+
 func (b Bot) handleDefault(m *tb.Message) {
 	if m.Private() {
 		b.bot.Send(m.Chat, `Mày nói clgv, éo hiểu!!`)
@@ -87,62 +124,93 @@ func (b Bot) handleText(m *tb.Message) {
 	switch mCommand[fmt.Sprintf("%d_%d", m.Chat.ID, m.Sender.ID)] {
 	case "createPoll":
 		b.handleCreatePoll(m)
+	case "done":
+		b.handleSubmit(m)
 	default:
 		b.handleDefault(m)
 	}
 }
 
 func (b Bot) handleDone(m *tb.Message) {
+	updateCurrentCommand("done", m)
+	b.bot.Reply(m, "nhập passphrase: ")
+	// inlineKeys := [][]tb.InlineButton{}
 
-	inlineKeys := [][]tb.InlineButton{}
+	// if len(pollData) > 0 {
+	// 	for n := 1; n < len(pollData); n++ {
+	// 		fmt.Println(pollData[n])
+	// 		inlineBtn := tb.InlineButton{
+	// 			Unique: fmt.Sprintf("%d", n),
+	// 			Text:   pollData[n],
+	// 		}
+	// 		b.bot.Handle(&inlineBtn, func(c *tb.Callback) {
+	// 			fmt.Println("--------------", c)
+	// 			// option := 0
+	// 			// for i, v := range questionOptions {
+	// 			// 	if v == replyBtn.Text {
+	// 			// 		option = i
+	// 			// 	}
+	// 			// }
+	// 			// b.handleAnswer(c)
+	// 			b.bot.Respond(c, &tb.CallbackResponse{
+	// 				Text: fmt.Sprintf("fuck you, mày vừa chọn phương án %d phải không ?", n-1),
+	// 			})
 
-	pollData := mCreate[fmt.Sprintf("%d_%d", m.Chat.ID, m.Sender.ID)]
-	fmt.Println(pollData)
-	if len(pollData) > 0 {
-		for n := 1; n < len(pollData); n++ {
-			fmt.Println(pollData[n])
-			inlineBtn := tb.InlineButton{
-				Unique: fmt.Sprintf("%d", n),
-				Text:   pollData[n],
-			}
-			b.bot.Handle(&inlineBtn, func(c *tb.Callback) {
-				fmt.Println("--------------", c)
-				// option := 0
-				// for i, v := range questionOptions {
-				// 	if v == replyBtn.Text {
-				// 		option = i
-				// 	}
-				// }
-				// b.handleAnswer(c)
-				b.bot.Respond(c, &tb.CallbackResponse{
-					Text: fmt.Sprintf("fuck you, mày vừa chọn phương án %d phải không ?", n-1),
-				})
+	// 		})
+	// 		inlineKeysRow := []tb.InlineButton{inlineBtn}
+	// 		inlineKeys = append(inlineKeys, inlineKeysRow)
+	// 	}
 
-			})
-			inlineKeysRow := []tb.InlineButton{inlineBtn}
-			inlineKeys = append(inlineKeys, inlineKeysRow)
-		}
+	// 	// for index, value := range textArr {
+	// 	// inlineBtn := tb.InlineButton{
+	// 	// 	Unique: "",
+	// 	// 	Text: value,
+	// 	// }
+	// 	// I
+	// 	// 	inlineKeys[index][0].Text = textArr[index+1]
+	// 	// }
+	// }
 
-		// for index, value := range textArr {
-		// inlineBtn := tb.InlineButton{
-		// 	Unique: "",
-		// 	Text: value,
-		// }
-		// I
-		// 	inlineKeys[index][0].Text = textArr[index+1]
-		// }
-	}
-
-	b.bot.Send(m.Sender, "Hello!", &tb.ReplyMarkup{
-		// ReplyKeyboard: replyKeys,
-		InlineKeyboard: inlineKeys,
-	})
+	// b.bot.Send(m.Sender, "Hello!", &tb.ReplyMarkup{
+	// 	// ReplyKeyboard: replyKeys,
+	// 	InlineKeyboard: inlineKeys,
+	// })
 }
 
 // func (b Bot) handleAnswer(c *tb.Callback) {
 // 	// b.bot.Send(m.Sender, fmt.Sprintf("Mày vừa chọn phương án %d phải không", option))
 // 	b.bot.Respond(c, &tb.CallbackResponse{...})
 // }
+func (b Bot) handleEventLog(vLog types.Log) {
+	txHash := vLog.TxHash.Hex()
+	fmt.Println(" on handle event log______________tx Hash____________", vLog.TxHash.Hex())
+	// fmt.Println("__________________________", vLog.Data, fmt.Sprintf("%s", vLog.Data)) // pointer to event log
+	campaignId := common.Bytes2Hex(vLog.Data)
+	fmt.Println("__________________________", campaignId) // pointer to event log
+	fmt.Println("__________________________address ", vLog.Address.Hex())
+	fmt.Println("_______________toppic ", vLog.Topics)
+	for _, topic := range vLog.Topics {
+		fmt.Println("_______________toppic ", topic.Hex())
+	}
+
+	txChat := mTx[strings.ToLower(txHash)]
+	if txChat != nil {
+		b.bot.Send(txChat.Chat, fmt.Sprintf("Poll hash %s đã được mine trên network rồi nhé !", txHash))
+	}
+}
+
+func (b Bot) subcribeEventLog(logs chan types.Log) {
+	go func() {
+		for {
+			select {
+			// case err := <-sub.Err():
+			// 	log.Fatal(err)
+			case vLog := <-logs:
+				b.handleEventLog(vLog)
+			}
+		}
+	}()
+}
 
 func main() {
 	err := godotenv.Load()
@@ -150,125 +218,57 @@ func main() {
 		log.Fatal("Error loading .env file")
 	}
 
-	// b, err := tb.NewBot(tb.Settings{
-	// 	Token: "454550958:AAHd8FQnm-x6uHjcIIKBHOfQhmh6TqRtsBY",
-	// 	Poller: &tb.LongPoller{
-	// 		Timeout: 10 * time.Second,
-	// 	},
-	// })
+	mTx = map[string]*tb.Message{}
+	eventLogs := make(chan types.Log)
 
-	// mybot := Bot{
-	// 	bot: b,
-	// 	// storage:  storage,
-	// 	// deadline: botConfig.Deadline,
-	// }
-
-	// if err != nil {
-	// 	log.Fatal(err)
-	// 	return
-	// }
-
-	// mybot.bot.Handle("/hello", func(m *tb.Message) {
-	// 	b.Send(m.Sender, "Hello world")
-	// })
-
-	// mybot.bot.Handle("/createPoll", func(m *tb.Message) {
-	// 	updateCurrentCommand("createPoll", m)
-	// 	// mybot.handleCreatePoll(m)
-	// 	b.Reply(m, "đúng rồi đấy, tao đang tạo poll, đưa bố title nào")
-	// })
-
-	// mybot.bot.Handle("/done", func(m *tb.Message) {
-	// 	mybot.handleDone(m)
-	// })
-
-	// mybot.bot.Handle(tb.OnText, func(m *tb.Message) {
-	// 	// all the text messages that weren't
-	// 	// captured by existing handlers
-	// 	mybot.handleText(m)
-	// 	// fmt.Println("in handle text, %d, %d", m.Chat.ID, m.Sender.ID)
-	// })
-
-	// b.Start()
-
-	fmt.Println("===================START: ", os.Getenv("VOTE_CONTRACT_RINKEBY"))
-	// ***************** endcode data
-	var title, option, url [32]byte
-	copy(option[:], "option title")
-	copy(url[:], "https://stackoverflow.com")
-	copy(title[:], "vote title")
-
-	listOptionsName := [][32]byte{option, option}
-	listOptionsUrl := [][32]byte{url, url}
-	voteNetwork, createNetworkErr := blockchainVote.NewEthereum(os.Getenv("VOTE_CONTRACT_RINKEBY"), os.Getenv("VOTE_ABI"))
+	voteNetwork, createNetworkErr := blockchainVote.NewEthereum(os.Getenv("VOTE_CONTRACT_RINKEBY"), os.Getenv("VOTE_ABI"), eventLogs)
 	if createNetworkErr != nil {
 		panic(createNetworkErr)
 	}
 
-	whiteListAddresses := []string{"0xd1263bec4e244d387f3205f6967cd68254c9a185", "0x2262d4f6312805851e3b27c40db2c7282e6e4a49"}
-	voteData, encodeErr := voteNetwork.EncodeCreateCampaign(title, listOptionsName, listOptionsUrl, big.NewInt(999999999999), false, whiteListAddresses)
-	if encodeErr != nil {
-		panic(encodeErr)
+	b, err := tb.NewBot(tb.Settings{
+		Token: "454550958:AAHd8FQnm-x6uHjcIIKBHOfQhmh6TqRtsBY",
+		Poller: &tb.LongPoller{
+			Timeout: 10 * time.Second,
+		},
+	})
+
+	mybot := Bot{
+		bot: b,
+		// storage:  storage,
+		// deadline: botConfig.Deadline,
+		voteNetwork: voteNetwork,
+	}
+	mybot.subcribeEventLog(eventLogs)
+
+	if err != nil {
+		log.Fatal(err)
+		return
 	}
 
-	fmt.Println("===================vote data encoded: ", voteData)
+	mybot.bot.Handle("/hello", func(m *tb.Message) {
+		b.Send(m.Sender, "Hello world")
+	})
 
-	// ***************** unlock keystore
-	d := time.Now().Add(5000 * time.Millisecond)
-	ctx, cancel := context.WithDeadline(context.Background(), d)
-	defer cancel()
+	mybot.bot.Handle("/createPoll", func(m *tb.Message) {
+		updateCurrentCommand("createPoll", m)
+		// mybot.handleCreatePoll(m)
+		b.Reply(m, "đúng rồi đấy, tao đang tạo poll, đưa bố title nào")
+	})
 
-	rpc, rpcErr := rpc.DialHTTP("https://rinkeby.infura.io")
-	if rpcErr != nil {
-		panic(rpcErr)
-	}
-	client := ethclient.NewClient(rpc)
+	mybot.bot.Handle("/done", func(m *tb.Message) {
+		mybot.handleDone(m)
+	})
 
-	keyJson, readErr := ioutil.ReadFile("./bot.keystore")
-	if readErr != nil {
-		fmt.Println("key json read error:")
-		panic(readErr)
-	}
+	mybot.bot.Handle(tb.OnText, func(m *tb.Message) {
+		// all the text messages that weren't
+		// captured by existing handlers
+		mybot.handleText(m)
+		// fmt.Println("in handle text, %d, %d", m.Chat.ID, m.Sender.ID)
+	})
 
-	// Get the private key
-	unlockedKey, keyErr := keystore.DecryptKey(keyJson, "123qwe123qwe")
-	if keyErr != nil {
-		panic(keyErr)
-	}
-	fmt.Println("===================keystore unlocked: ", unlockedKey)
-	// ***************** create data tx
-	fmt.Println("---------------- addres: ", unlockedKey.Address.Hex())
-
-	nonce, noneErr := client.NonceAt(ctx, unlockedKey.Address, nil)
-	if noneErr != nil {
-		panic(noneErr)
-	}
-	fmt.Println("===================nonce fetched: ", nonce)
-
-	tx := types.NewTransaction(
-		nonce,
-		common.HexToAddress(os.Getenv("VOTE_CONTRACT_RINKEBY")),
-		big.NewInt(0),
-		500000,
-		big.NewInt(50000000000),
-		common.Hex2Bytes(voteData),
-	)
-	fmt.Println("===================tx created: ", tx)
-	fmt.Printf("%x", unlockedKey.PrivateKey.D.Bytes())
-	// ************** sign data
-	// signTx, signErr := types.SignTx(tx, types.NewEIP155Signer(big.NewInt(4)), unlockedKey.PrivateKey)
-	signTx, signErr := types.SignTx(tx, types.HomesteadSigner{}, unlockedKey.PrivateKey)
-	if signErr != nil {
-		panic(signErr)
-	}
-
-	fmt.Println("===================tx signed: ", signTx)
-
-	// *************** send tx
-
-	errSendTransaction := client.SendTransaction(ctx, signTx)
-	if errSendTransaction != nil {
-		panic(errSendTransaction)
-	}
+	b.Start()
 
 }
+
+// todo monitor tx status by hash
