@@ -267,7 +267,9 @@ func main() {
 		// fmt.Println("in handle text, %d, %d", m.Chat.ID, m.Sender.ID)
 	})
 
-	b.Start()
+	// b.Start()
+
+	mybot.voteNetwork.GetCampaignData(big.NewInt(6))
 
 }
 

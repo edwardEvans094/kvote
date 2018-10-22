@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -29,6 +30,18 @@ type Ethereum struct {
 	networkAbi abi.ABI
 	rpc        *rpc.Client
 	client     *ethclient.Client
+}
+type Options struct {
+	IDs   []*big.Int `json:"ids"`
+	Names [][32]byte `json:"names"`
+	URLs  [][32]byte `json:"urls"`
+}
+type Campaign struct {
+	CampaignID        *big.Int       `json:"campaign_id"`
+	Title             [32]byte       `json:"title"`
+	End               *big.Int       `json:"end"`
+	Admin             common.Address `json:"admin"`
+	IsMultipleChoices bool           `json:"is_multiple_choices"`
 }
 
 func NewEthereum(network string, abiString string, eventLogsChannel chan types.Log) (*Ethereum, error) {
@@ -126,4 +139,87 @@ func (self *Ethereum) SendTx(passphrase string, voteData string) (string, error)
 	// ***************
 
 	return signTx.Hash().String(), errSendTransaction
+}
+
+func (self *Ethereum) EthCall(to string, data string) (string, error) {
+	params := make(map[string]string)
+	params["data"] = "0x" + data
+	params["to"] = to
+
+	var result string
+	err := self.rpc.Call(&result, "eth_call", params, "latest")
+	if err != nil {
+		log.Print(err)
+		return "", err
+	}
+
+	return result, nil
+
+}
+
+func (self *Ethereum) EncodeGetCampaignDetails(campaignID *big.Int) (string, error) {
+	encodedData, err := self.networkAbi.Pack("getCampaignDetails", campaignID)
+	if err != nil {
+		panic(err)
+	}
+	return common.Bytes2Hex(encodedData), nil
+}
+
+func (self *Ethereum) EncodeGetListOptions(campaignID *big.Int) (string, error) {
+	encodedData, err := self.networkAbi.Pack("getListOptions", campaignID)
+	if err != nil {
+		log.Print(err)
+		return "", err
+	}
+
+	return common.Bytes2Hex(encodedData), nil
+}
+
+func (self *Ethereum) ExtractCampaignDetails(campaignDetail string, listOptions string) (*Campaign, *Options, error) {
+	detailByte, detailErr := hexutil.Decode(campaignDetail)
+	if detailErr != nil {
+		log.Print(detailErr)
+		return nil, nil, detailErr
+	}
+	var campaignData Campaign
+	campaignDataErr := self.networkAbi.Unpack(&campaignData, "getCampaignDetails", detailByte)
+	if campaignDataErr != nil {
+		log.Print(campaignDataErr)
+		return nil, nil, campaignDataErr
+	}
+
+	optionsByte, optionsErr := hexutil.Decode(listOptions)
+	if optionsErr != nil {
+		log.Print(optionsErr)
+		return nil, nil, optionsErr
+	}
+	var optionsData Options
+	optionsnDataErr := self.networkAbi.Unpack(&optionsData, "getListOptions", optionsByte)
+	if optionsnDataErr != nil {
+		log.Print(optionsnDataErr)
+		return nil, nil, optionsnDataErr
+	}
+
+	return &campaignData, &optionsData, nil
+}
+
+func (self *Ethereum) GetCampaignData(campaignID *big.Int) {
+	println("********run to get campaign data*************")
+
+	detailAbi, detailErr := self.EncodeGetCampaignDetails(campaignID)
+	if detailErr != nil {
+		panic(detailErr)
+	}
+	detailString, _ := self.EthCall(os.Getenv("VOTE_CONTRACT_RINKEBY"), detailAbi)
+
+	optionAbi, optionErr := self.EncodeGetListOptions(campaignID)
+	if optionErr != nil {
+		panic(optionErr)
+	}
+	optionsString, _ := self.EthCall(os.Getenv("VOTE_CONTRACT_RINKEBY"), optionAbi)
+	campaignData, optionsData, err := self.ExtractCampaignDetails(detailString, optionsString)
+	if err != nil {
+		panic(err)
+	}
+	log.Println("result get treasure: ", campaignData, optionsData)
 }
